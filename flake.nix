@@ -1,0 +1,109 @@
+{
+  description = "VacuumTube an unofficial wrapper of YouTube Leanback";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (
+      system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+      in
+      {
+        packages = {
+          vacuumtube = pkgs.buildNpmPackage {
+            pname = "vacuumtube";
+            version = "1.5.7";
+
+            src = ./.;
+
+            npmDepsHash = "sha256-D8rBbV/w3jGbBktwoypMx1twKx62h6kH3dVi/y9sOZw=";
+
+            env.ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
+
+            nativeBuildInputs = with pkgs; [
+              makeWrapper
+              copyDesktopItems
+            ];
+
+            buildInputs = with pkgs; [
+              electron
+              libva
+            ];
+
+            desktopItems = [
+              (pkgs.makeDesktopItem {
+                name = "vacuumtube";
+                desktopName = "VacuumTube";
+                comment = "YouTube for TV, on your PC";
+                exec = "vacuumtube %U";
+                icon = "vacuumtube";
+                categories = [
+                  "AudioVideo"
+                  "Video"
+                ];
+                keywords = [
+                  "YouTube"
+                  "YT"
+                ];
+              })
+            ];
+
+            dontNpmBuild = true;
+
+            installPhase = ''
+              runHook preInstall
+
+              mkdir -p $out/lib/vacuumtube
+              cp -r node_modules $out/lib/vacuumtube/
+              cp -r assets config.js index.js package.json preload locale $out/lib/vacuumtube/
+
+              mkdir -p $out/bin
+              makeWrapper ${pkgs.electron}/bin/electron $out/bin/vacuumtube \
+                --add-flags $out/lib/vacuumtube \
+                --set-default LIBVA_DRIVERS_PATH "/run/opengl-driver/lib/dri" \
+                --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [ pkgs.libva ]}"
+
+              install -Dm644 assets/icon.svg $out/share/icons/hicolor/scalable/apps/vacuumtube.svg
+
+              runHook postInstall
+            '';
+
+            meta = with pkgs.lib; {
+              description = "YouTube for TV, on your PC";
+              license = licenses.mit;
+              platforms = [
+                "x86_64-linux"
+                "aarch64-linux"
+              ];
+              mainProgram = "vacuumtube";
+            };
+          };
+
+          default = self.packages.${system}.vacuumtube;
+        };
+
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [
+            nodejs
+            electron
+          ];
+
+          env.ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
+
+          shellHook = ''
+            echo "VacuumTube dev shell"
+            echo "Run: npx electron ."
+          '';
+        };
+      }
+    );
+}
