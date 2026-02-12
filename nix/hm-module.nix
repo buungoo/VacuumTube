@@ -13,16 +13,21 @@
       let
         cfg = config.programs.vacuumtube;
         vacuumtubePackage = self.packages.${pkgs.stdenv.hostPlatform.system}.vacuumtube;
-        isLinux = pkgs.stdenv.hostPlatform.isLinux;
+
+        allFlags =
+          cfg.electronFlags
+          ++ lib.optionals (cfg.enableFeatures != [ ]) [
+            "--enable-features=${builtins.concatStringsSep "," cfg.enableFeatures}"
+          ];
 
         wrappedPackage =
-          if cfg.electronFlags == [ ] then
+          if allFlags == [ ] then
             vacuumtubePackage
           else
             vacuumtubePackage.overrideAttrs (old: {
               installPhase = old.installPhase + ''
                 wrapProgram $out/bin/vacuumtube \
-                  ${lib.concatMapStringsSep " " (f: "--add-flags '${f}'") cfg.electronFlags}
+                  ${lib.concatMapStringsSep " " (f: "--add-flags '${f}'") allFlags}
               '';
             });
       in
@@ -36,15 +41,25 @@
             description = "The VacuumTube package to use.";
           };
 
-          electronFlags = lib.mkOption {
+          enableFeatures = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [ ];
             example = lib.literalExpression ''
               [
                 # Enable hardware-accelerated video decode on NVIDIA GPUs
-                "--enable-features=AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,VaapiOnNvidiaGPUs"
+                "AcceleratedVideoDecodeLinuxZeroCopyGL"
+                "AcceleratedVideoDecodeLinuxGL"
+                "VaapiIgnoreDriverChecks"
+                "VaapiOnNvidiaGPUs"
               ]
             '';
+            description = "Chromium features to enable via --enable-features.";
+          };
+
+          electronFlags = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            example = [ "--ignore-gpu-blocklist" ];
             description = "Extra flags to pass to the Electron binary.";
           };
         };
